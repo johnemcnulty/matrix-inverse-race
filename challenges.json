@@ -1,0 +1,9 @@
+[
+  { "id": "warmup",   "name": "Warm-up",         "rows": [[2, 1], [5, 3]] },
+  { "id": "fracs2",   "name": "Fractions ahead", "rows": [[4, 7], [2, 6]] },
+  { "id": "classic3", "name": "Classic 3×3",     "rows": [[1, 2, 3], [0, 1, 4], [5, 6, 0]] },
+  { "id": "tridiag",  "name": "Tridiagonal",     "rows": [[2, -1, 0], [-1, 2, -1], [0, -1, 2]] },
+  { "id": "zeropiv",  "name": "Zero pivot",      "rows": [[0, 1, 2], [1, 0, 3], [4, -3, 8]] },
+  { "id": "deadend",  "name": "Dead end?",       "rows": [[1, 2, 3], [4, 5, 6], [7, 8, 9]] },
+  { "id": "signs4",   "name": "Sign flip 4×4",   "rows": [[1, 1, 1, -1], [1, 1, -1, 1], [1, -1, 1, 1], [-1, 1, 1, 1]] }
+]

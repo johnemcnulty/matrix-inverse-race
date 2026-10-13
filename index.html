@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Matrix Inverse Race</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: graph-paper worksheet. Board (matrix + move builder) on the left, challenge rail on the right; stacks on phones. */
+:root {
+  --paper: #f3f6f5;
+  --grid: rgba(40, 90, 120, 0.07);
+  --surface: #ffffff;
+  --ink: #1b2830;
+  --muted: #5a6a72;
+  --line: #d3dcdf;
+  --accent: #1d5fa8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2ecf7;
+  --hi: #fde9a3;
+  --draft: #e6f0fb;
+  --ok: #23774a;
+  --ok-soft: #dcf0e4;
+  --bad: #b23c2a;
+  --bad-soft: #f8e1dc;
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Instrument Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #11191d; --grid: rgba(140, 190, 220, 0.05); --surface: #182329; --ink: #e2eaed; --muted: #92a3ab;
+    --line: #2c3a41; --accent: #78aef0; --accent-ink: #0d1a26; --accent-soft: #1d3247; --hi: rgba(250, 210, 90, 0.2);
+    --draft: rgba(120, 174, 240, 0.14); --ok: #6fd39b; --ok-soft: rgba(111, 211, 155, 0.14); --bad: #f08c78; --bad-soft: rgba(240, 140, 120, 0.15);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #11191d; --grid: rgba(140, 190, 220, 0.05); --surface: #182329; --ink: #e2eaed; --muted: #92a3ab;
+  --line: #2c3a41; --accent: #78aef0; --accent-ink: #0d1a26; --accent-soft: #1d3247; --hi: rgba(250, 210, 90, 0.2);
+  --draft: rgba(120, 174, 240, 0.14); --ok: #6fd39b; --ok-soft: rgba(111, 211, 155, 0.14); --bad: #f08c78; --bad-soft: rgba(240, 140, 120, 0.15);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+body {
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 16px; padding-block: 24px 48px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; margin-bottom: 20px; }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.1; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h1 .aug { font-family: var(--f-num); font-weight: 400; font-size: 0.55em; color: var(--accent); letter-spacing: 0; vertical-align: middle; }
+header p { margin: 0; color: var(--muted); max-width: 60ch; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.05rem; margin: 0; }
+.eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
+@media (max-width: 880px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+
+/* Board */
+.boardtop { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.turns { display: flex; align-items: baseline; gap: 8px; }
+.turns b { font-family: var(--f-num); font-size: 2rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.turns span { color: var(--muted); font-size: 0.85rem; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.ghost { background: transparent; }
+.matlabel { font-size: 0.82rem; color: var(--muted); margin: 0 0 8px; min-height: 1.3em; }
+.matlabel .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-weight: 600; font-size: 0.75rem; margin-right: 6px; }
+.tag.pend { background: var(--hi); color: var(--ink); }
+.tag.drf { background: var(--draft); color: var(--accent); }
+.scroll { overflow-x: auto; padding-bottom: 4px; }
+.mats { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: flex-start; }
+.matfig { margin: 0; min-width: 0; max-width: 100%; }
+.matfig figcaption { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+table.mat tr.will td.lbl { color: var(--accent); font-weight: 700; }
+table.mat tr.will td.lbl::after { content: " →"; }
+
+table.mat { border-collapse: separate; border-spacing: 0; font-family: var(--f-num); font-variant-numeric: tabular-nums; margin: 4px 0; }
+table.mat td { height: 2.9em; padding: 0 0.55em; text-align: center; min-width: 2.7em; white-space: nowrap; transition: background-color 0.25s; }
+table.mat td.lbl { min-width: 0; padding: 0 10px 0 0; color: var(--muted); font-size: 0.82rem; text-align: right; }
+table.mat td.br { min-width: 0; width: 7px; padding: 0; border-left: 2px solid var(--ink); }
+table.mat td.br.r { border-left: 0; border-right: 2px solid var(--ink); }
+table.mat tr:first-child td.br { border-top: 2px solid var(--ink); }
+table.mat tr:last-child td.br { border-bottom: 2px solid var(--ink); }
+table.mat td.div { min-width: 0; width: 0; padding: 0 0 0 0; border-left: 1.5px dashed var(--muted); }
+table.mat td.div + td { padding-left: 0.9em; }
+table.mat tr.pend td.c { background: var(--hi); }
+table.mat tr.draft td.c { background: var(--draft); }
+table.mat tr.flash td.c { animation: flash 1.1s ease-out; }
+@keyframes flash { from { background: var(--hi); } to { background: transparent; } }
+table.mat td.c.okc { color: var(--ok); background: var(--ok-soft); }
+table.mat td.c.badc { color: var(--bad); background: var(--bad-soft); font-weight: 600; }
+table.mat td.c.idc { color: var(--ok); }
+.fr { display: inline-flex; align-items: center; }
+.stk { display: inline-flex; flex-direction: column; font-size: 0.74em; line-height: 1.12; text-align: center; vertical-align: middle; }
+.stk span:first-child { border-bottom: 1px solid currentColor; padding: 0 2px; }
+.sg { margin-right: 1px; }
+
+/* Builder */
+.modes { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; margin-bottom: 14px; }
+.modes button { border: 0; padding: 5px 12px; border-radius: 6px; }
+.modes button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.formula { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 8px; font-family: var(--f-num); font-size: 1rem; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-family: var(--f-num); padding: 4px 9px; border-radius: 6px; font-size: 0.92rem; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip.none { font-family: var(--f-body); font-size: 0.82rem; }
+.formula input { font-family: var(--f-num); font-size: 1rem; width: 4.6em; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); text-align: center; }
+.formula .op { color: var(--muted); }
+.formula .rowref { font-weight: 600; }
+.group { display: inline-flex; align-items: center; gap: 6px; }
+.addrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+.expr { font-family: var(--f-num); font-size: 1.05rem; font-weight: 600; padding: 5px 10px; background: var(--paper); border-radius: 6px; border: 1px solid var(--line); }
+.err { color: var(--bad); font-size: 0.86rem; }
+.typed { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 0.86rem; color: var(--muted); }
+.typed input { font-family: var(--f-num); flex: 1 1 200px; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.pending { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 10px; }
+.pendlist { display: flex; flex-wrap: wrap; gap: 6px; min-height: 2em; align-items: center; }
+.pchip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--f-num); background: var(--hi); border-radius: 6px; padding: 3px 4px 3px 10px; font-size: 0.92rem; }
+.pchip button { border: 0; background: transparent; padding: 0 6px; font-size: 1rem; line-height: 1; color: var(--muted); }
+.hint { color: var(--muted); font-size: 0.86rem; }
+.playrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Check */
+.check h2 { margin-bottom: 4px; }
+.product { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0; }
+.product .sym { font-family: var(--f-num); font-size: 1.3rem; color: var(--muted); }
+.verdict { font-weight: 600; padding: 10px 12px; border-radius: 8px; }
+.verdict.ok { background: var(--ok-soft); color: var(--ok); }
+.verdict.bad { background: var(--bad-soft); color: var(--bad); }
+
+/* Rail */
+.you { display: flex; flex-direction: column; gap: 8px; }
+.you input { font: inherit; font-weight: 600; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); width: 100%; }
+.boardlist { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.boardlist ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; }
+.boardlist li { display: grid; grid-template-columns: 1.8em minmax(0, 1fr) auto; gap: 8px; padding: 4px 6px; border-radius: 5px; }
+.boardlist li.me { background: var(--accent-soft); font-weight: 600; }
+.boardlist .rk { color: var(--muted); font-family: var(--f-num); font-size: 0.86rem; }
+.boardlist .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.boardlist .tn { font-family: var(--f-num); }
+.games li { grid-template-columns: minmax(0, 1fr) auto; font-family: var(--f-body); }
+.games button { text-align: left; padding: 4px 8px; font-size: 0.86rem; border: 0; background: transparent; color: var(--accent); }
+.term { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.term .rm { border: 0; background: transparent; color: var(--muted); padding: 2px 6px; font-size: 1rem; }
+.addterm { font-family: var(--f-body); font-size: 0.84rem; padding: 4px 10px; border-style: dashed; }
+.ok { color: var(--ok); }
+.chal { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.chal button { display: flex; justify-content: space-between; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; }
+.chal button[aria-current="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.randbox { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.trap { display: flex; gap: 8px; align-items: center; font-size: 0.86rem; color: var(--muted); cursor: pointer; }
+.randbox .chip { font-family: var(--f-body); font-size: 0.84rem; }
+.chal .meta { font-family: var(--f-num); font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.hist { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-family: var(--f-num); font-size: 0.86rem; }
+.hist li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: 6px; }
+.hist .n { color: var(--muted); }
+.hist .badtxt { color: var(--bad); font-family: var(--f-body); }
+.share textarea, .share input { width: 100%; font-family: var(--f-num); font-size: 0.86rem; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); }
+.share textarea { min-height: 5.2em; resize: vertical; }
+.share .row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.rules { margin: 8px 0 0; padding-left: 1.1em; color: var(--muted); font-size: 0.88rem; display: flex; flex-direction: column; gap: 4px; }
+.small { font-size: 0.82rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { table.mat tr.flash td.c { animation: none; } table.mat td { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Matrix Inverse Race <span class="aug">[A | I] → [I | A⁻¹]</span></h1>
+    <p>Row-reduce the augmented matrix to find the inverse. Each turn you may play up to N−1 row operations. Fewest turns wins.</p>
+  </header>
+
+  <div class="layout">
+    <div class="col">
+      <section class="panel" aria-label="Board">
+        <div class="boardtop">
+          <div>
+            <div class="eyebrow" id="chalName">Challenge</div>
+            <div class="turns"><b id="turnCount">0</b><span id="turnSub">turns played</span></div>
+          </div>
+          <div class="btnrow">
+            <button id="btnUndo" class="ghost">Undo turn</button>
+            <button id="btnRestart" class="ghost">Restart</button>
+            <button id="btnClaim">No inverse</button>
+            <button id="btnCheck">Check inverse</button>
+          </div>
+        </div>
+        <p class="matlabel" id="matLabel"></p>
+        <div class="mats">
+          <figure class="matfig"><figcaption id="capNow">Start of turn 1</figcaption><div class="scroll" id="matrix"></div></figure>
+          <figure class="matfig" id="previewFig" hidden><figcaption id="capNext">After this turn</figcaption><div class="scroll" id="preview"></div></figure>
+        </div>
+      </section>
+
+      <section class="panel" id="builderPanel" aria-label="Build a turn">
+        <div class="modes" role="group" aria-label="Operation type">
+          <button data-mode="combo" aria-pressed="true">Combine rows</button>
+          <button data-mode="swap" aria-pressed="false">Swap rows</button>
+        </div>
+        <div id="builder"></div>
+        <div class="addrow">
+          <span class="expr" id="expr">…</span>
+          <button id="btnAdd" class="primary">Add to turn</button>
+          <span class="err" id="err" role="status"></span>
+        </div>
+        <label class="typed" for="typed">or type it:
+          <input id="typed" placeholder="R2 <- R2 - 2R1   ·   R1 <-> R3   ·   R3 <- 1/2 R3" autocomplete="off" spellcheck="false">
+        </label>
+        <div class="pending">
+          <div class="playrow">
+            <span class="eyebrow" id="pendCount">This turn</span>
+            <button id="btnPlay" class="primary">Play turn</button>
+          </div>
+          <div class="pendlist" id="pendList"></div>
+        </div>
+      </section>
+
+      <section class="panel check" id="checkPanel" hidden aria-live="polite"></section>
+    </div>
+
+    <aside class="col">
+      <section class="panel you">
+        <label for="playerName" class="eyebrow">Playing as</label>
+        <input id="playerName" maxlength="20" placeholder="Your name" autocomplete="nickname">
+        <p class="small" id="serverNote" style="margin:0"></p>
+      </section>
+      <section class="panel">
+        <h2>Leaderboard</h2>
+        <div id="board" class="boardlist"></div>
+      </section>
+      <section class="panel">
+        <h2>Challenges</h2>
+        <div class="chal" id="chalList"></div>
+        <div class="randbox">
+          <span class="eyebrow">New random challenge</span>
+          <div class="chips" role="group" aria-label="Size" id="randSize"></div>
+          <div class="chips" role="group" aria-label="Answer type" id="randKind"></div>
+          <label class="trap"><input type="checkbox" id="trapToggle"> Sometimes deal a matrix with no inverse</label>
+          <button id="btnRandom" class="primary">Deal a new matrix</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Turn log</h2>
+        <ol class="hist" id="hist"></ol>
+      </section>
+      <section class="panel share">
+        <h2>Share or make a challenge</h2>
+        <p class="small" style="margin:6px 0 8px" id="shareHint">Send this to a friend so they can race the same matrix.</p>
+        <div class="row" style="margin-top:0"><input id="shareCode" readonly aria-label="Challenge link or code"><button id="btnCopy">Copy</button></div>
+        <p class="small" style="margin:14px 0 6px">Paste a code, or type a square matrix with one row per line.</p>
+        <textarea id="customIn" aria-label="Custom matrix or challenge code" placeholder="2 1 0&#10;1 3 1&#10;0 1 4"></textarea>
+        <div class="row"><button id="btnLoad">Load challenge</button><span class="err" id="customErr" role="status"></span></div>
+      </section>
+      <section class="panel" id="historyPanel" hidden>
+        <h2>Your games</h2>
+        <ol class="hist games" id="games"></ol>
+      </section>
+      <section class="panel">
+        <h2>Rules</h2>
+        <ul class="rules">
+          <li>A row operation is <b>Ri ← a·Ri + b·Rj + …</b> using up to N−1 other rows (or none, to just scale), or a swap <b>Ri ↔ Rj</b>.</li>
+          <li>A turn holds 1 to N−1 operations, all read from the matrix as it stood at the start of the turn.</li>
+          <li>Each row may change once per turn, and operations can use a row's original values even if it changes this turn. A turn that would make the matrix lose its inverse is blocked.</li>
+          <li>When the left side is the identity, the game multiplies A by the right side to prove it's the inverse.</li>
+          <li>Some matrices have no inverse. Reduce until a row on the left is all zeros, then press <b>No inverse</b>. A wrong claim costs a turn.</li>
+        </ul>
+
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script type="module">
+import { F, Z, ONE, toF, codeOf, augment, isIdentity, rightHalf, multiply, det, zeroRow, readMatrix, challengeId,
+  randomMatrix, randomSingular, touched, validate, apply, opText, parseOp, WRONG_CLAIM } from "./matrix.mjs";
+
+/* ------------------------------------------------------------------
+   SERVER
+   Leaderboards, share links and game history need the Matrix Race server.
+   Deploy it with the README, then paste its ApiUrl here. ?server=<url> overrides it.
+------------------------------------------------------------------- */
+const SERVER_URL = "https://rwo716bpvb.execute-api.us-east-1.amazonaws.com";
+const PAGE_PARAMS = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
+const serverUrl = () => (PAGE_PARAMS.get("server") || SERVER_URL).replace(/\/+$/, "");
+
+async function api(method, path, body) {
+  let res;
+  try {
+    res = await fetch(serverUrl() + path, { method, headers: body ? { "content-type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  } catch { throw Object.assign(new Error("Couldn't reach the game server. Check your connection."), { code: "offline" }); }
+  let data = {}; try { data = await res.json(); } catch {}
+  if (!res.ok) throw Object.assign(new Error(data.error?.message || `The server answered ${res.status}.`), { code: data.error?.code, status: res.status });
+  return data;
+}
+
+/* ------------------------------------------------------------------
+   SAVED ON THIS DEVICE
+   A random player id (so the server can keep your history), your name, and your best per matrix.
+------------------------------------------------------------------- */
+const STORE_KEY = "matrixRace.v1";
+const mem = {};
+function storeRead() { try { return JSON.parse(localStorage.getItem(STORE_KEY)) || mem; } catch { return mem; } }
+function storeWrite(o) { Object.assign(mem, o); try { localStorage.setItem(STORE_KEY, JSON.stringify(o)); } catch {} }
+const me = (() => {
+  const s = storeRead();
+  if (!s.playerId) s.playerId = (globalThis.crypto?.randomUUID?.() || `p-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  s.best = s.best || {};
+  storeWrite(s);
+  return s;
+})();
+const saveMe = () => storeWrite(me);
+
+// ---------- State ----------
+let CHALLENGES = [];
+let S = {};      // game: chal, n, A, M, history, pending, solved, flash, check
+let R = { n: null, kind: "whole", traps: false };            // random-challenge picker
+let B = {};      // builder: mode, t, a, terms [{s, b}], i, j (coefficients as typed)
+let BOARD = { state: "idle" };                                // leaderboard for the current challenge
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function freshBuilder(n) { return { mode: "combo", t: Math.min(1, n - 1), a: "1", terms: [{ s: 0, b: "" }], i: 0, j: 1 }; }
+
+function loadChallenge(ch) {
+  const A = toF(ch.rows), n = A.length;
+  S = { chal: { ...ch, code: codeOf(A), id: null }, n, A, M: augment(A), history: [], pending: [], solved: false, flash: [], check: null };
+  B = freshBuilder(n);
+  $("typed").value = ""; $("customErr").textContent = "";
+  renderBuilder(); render();
+  const mine = S;
+  challengeId(A).then(id => { if (S !== mine) return; S.chal.id = id; setChallengeParam(id); renderShare(); fetchBoard(); });
+}
+
+// ---------- Builder ----------
+// Read the builder into an op (or an error message)
+function draftOp() {
+  if (B.mode === "swap") return { op: { type: "swap", i: B.i, j: B.j } };
+  const aRaw = B.a.trim(), a = aRaw === "" ? ONE : F.parse(aRaw);
+  if (!a) return { err: `“${aRaw}” isn't a number. Use forms like 3, -2, 1/2 or 0.5.` };
+  if (!B.terms.length && (aRaw === "" || a.one)) return { err: `Type a multiplier for R${B.t + 1}, or add a row.`, quiet: true };
+  const terms = [];
+  for (const { s, b } of B.terms) {
+    if (b.trim() === "") return { err: `Type how many R${s + 1}'s to add (use a negative number to subtract).`, quiet: true };
+    const k = F.parse(b);
+    if (!k) return { err: `“${b}” isn't a number. Use forms like 3, -2, 1/2 or 0.5.` };
+    terms.push({ s, b: k });
+  }
+  return { op: { type: "combo", t: B.t, a, terms } };
+}
+
+function renderBuilder() {
+  const n = S.n, rows = [...Array(n).keys()];
+  document.querySelectorAll(".modes button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.mode === B.mode)));
+  const chip = (attr, r, on, extra = "") => `<button class="chip" data-${attr}="${r}" ${extra} aria-pressed="${on}">R${r + 1}</button>`;
+  if (B.mode === "combo") {
+    B.terms = B.terms.filter(x => x.s !== B.t);
+    const terms = B.terms.map((x, k) => {
+      const usedElsewhere = new Set(B.terms.filter((_, q) => q !== k).map(y => y.s));
+      const opts = rows.filter(r => r !== B.t && !usedElsewhere.has(r));
+      return `<span class="term"><span class="op">+</span>
+        <input id="coefB${k}" data-term="${k}" value="${esc(x.b)}" placeholder="k" aria-label="Multiplier on R${x.s + 1}">
+        <span class="chips" role="group" aria-label="Row to add">${opts.map(r => chip("s", r, r === x.s, `data-k="${k}"`)).join("")}</span>
+        <button class="rm" data-rmterm="${k}" aria-label="Remove R${x.s + 1} from this operation">×</button></span>`;
+    }).join("");
+    const canAdd = B.terms.length < n - 1;
+    $("builder").innerHTML = `
+      <div class="formula">
+        <span class="group"><span class="chips" role="group" aria-label="Row to change">${rows.map(r => chip("t", r, r === B.t)).join("")}</span></span>
+        <span class="op">←</span>
+        <span class="group"><input id="coefA" value="${esc(B.a)}" aria-label="Multiplier on the row being changed"><span class="rowref">R${B.t + 1}</span></span>
+        ${terms}
+        ${canAdd ? `<button class="chip addterm" id="btnAddTerm">${B.terms.length ? "+ add another row" : "+ add a row"}</button>` : ""}
+      </div>`;
+  } else {
+    $("builder").innerHTML = `
+      <div class="formula">
+        <span class="chips" role="group" aria-label="First row">${rows.map(r => chip("i", r, r === B.i)).join("")}</span>
+        <span class="op">↔</span>
+        <span class="chips" role="group" aria-label="Second row">${rows.map(r => chip("j", r, r === B.j)).join("")}</span>
+      </div>`;
+  }
+}
+
+// ---------- Rendering ----------
+const absN = x => (x < 0n ? -x : x);
+function fh(f) {
+  const neg = f.n < 0n, a = absN(f.n), sg = neg ? '<span class="sg">−</span>' : "";
+  if (f.d === 1n) return `${sg}${a}`;
+  return `<span class="fr">${sg}<span class="stk"><span>${a}</span><span>${f.d}</span></span></span>`;
+}
+function matHTML(M, { split = 0, labels = false, rowCls = () => "", cellCls = () => "" } = {}) {
+  let h = '<table class="mat"><tbody>';
+  M.forEach((r, i) => {
+    h += `<tr class="${rowCls(i)}">`;
+    if (labels) h += `<td class="lbl">R${i + 1}</td>`;
+    h += '<td class="br"></td>';
+    r.forEach((x, j) => { if (split && j === split) h += '<td class="div"></td>'; h += `<td class="c ${cellCls(i, j, x)}">${fh(x)}</td>`; });
+    h += '<td class="br r"></td></tr>';
+  });
+  return h + "</tbody></table>";
+}
+
+function render() {
+  const n = S.n;
+  $("chalName").textContent = S.chal.name.includes("×") ? S.chal.name : `${S.chal.name}  ·  ${n}×${n}`;
+  $("turnCount").textContent = S.history.length;
+  const best = me.best[S.chal.code];
+  $("turnSub").textContent = (S.history.length === 1 ? "turn played" : "turns played") + (best ? `  ·  your best ${best}` : "");
+  $("btnUndo").disabled = !S.history.length || S.solved || !!S.history.at(-1)?.claim;
+  $("btnRestart").disabled = !S.history.length && !S.pending.length;
+  $("btnClaim").disabled = S.solved;
+  $("btnCheck").disabled = S.solved;
+
+  // Builder + preview
+  const d = S.solved ? {} : draftOp();
+  const derr = d.op ? validate(d.op, S.pending, n) : d.err;
+  $("expr").textContent = d.op ? opText(d.op) : "…";
+  $("err").textContent = S.solved || d.quiet ? "" : derr || "";
+  $("pendCount").textContent = `This turn  ·  ${S.pending.length} of ${n - 1} operation${n - 1 > 1 ? "s" : ""}`;
+  $("pendList").innerHTML = S.pending.length
+    ? S.pending.map((op, k) => `<span class="pchip">${opText(op)}<button data-rm="${k}" aria-label="Remove ${opText(op)}">×</button></span>`).join("")
+    : `<span class="hint">${S.solved ? "Finished. Pick another challenge or restart to beat your score." : "Build an operation above and add it to this turn."}</span>`;
+  $("builderPanel").querySelectorAll("button, input").forEach(el => { el.disabled = S.solved; });
+  $("btnAdd").disabled = S.solved || !d.op || !!derr;
+  $("btnPlay").disabled = S.solved || !S.pending.length;
+
+  // The start-of-turn matrix is always shown; a preview of the turn appears beside it while you build.
+  const useDraft = d.op && !derr;
+  const pendRows = new Set(S.pending.flatMap(touched)), draftRows = new Set(useDraft ? touched(d.op) : []);
+  const flash = new Set(S.flash), changing = !S.solved && (S.pending.length || useDraft);
+  $("capNow").textContent = S.solved ? "Final matrix" : `Start of turn ${S.history.length + 1}`;
+  $("matrix").innerHTML = matHTML(S.M, {
+    split: n, labels: true,
+    rowCls: i => (pendRows.has(i) || draftRows.has(i) ? "will" : flash.has(i) ? "flash" : ""),
+  });
+  $("previewFig").hidden = !changing;
+  if (changing) $("preview").innerHTML = matHTML(apply(S.M, useDraft ? [...S.pending, d.op] : S.pending), {
+    split: n, labels: true, rowCls: i => (draftRows.has(i) ? "draft" : pendRows.has(i) ? "pend" : ""),
+  });
+  S.flash = [];
+  const parts = [];
+  if (S.pending.length) parts.push('<span class="tag pend">added to this turn</span>');
+  if (useDraft) parts.push('<span class="tag drf">operation you are building</span>');
+  $("matLabel").innerHTML = changing
+    ? parts.join("") + "The preview shows the matrix after you play the turn."
+    : S.solved ? "" : S.history.length ? "Rows that changed last turn flash briefly." : "The left side is A. The right side starts as the identity.";
+
+  // Turn log
+  $("hist").innerHTML = S.history.length
+    ? S.history.map((h, k) => `<li><span class="n">${k + 1}.</span><span>${h.claim ? `<span class="badtxt">${h.claim}</span>` : h.ops.map(opText).join("<br>")}</span></li>`).join("")
+    : '<li><span class="n">–</span><span class="small" style="font-family:var(--f-body)">No turns yet.</span></li>';
+
+  // Challenge list
+  const known = CHALLENGES.some(c => c.code === S.chal.code);
+  $("chalList").innerHTML = CHALLENGES.map(c => {
+    const b = me.best[c.code];
+    return `<button data-chal="${c.id}" aria-current="${c.code === S.chal.code}"><span>${esc(c.name)}</span><span class="meta">${c.rows.length}×${c.rows.length}${b ? ` · best ${b}` : ""}</span></button>`;
+  }).join("") + (known ? "" : `<button aria-current="true"><span>${esc(S.chal.name)}</span><span class="meta">${n}×${n}</span></button>`);
+  const rn = R.n ?? n;
+  $("randSize").innerHTML = [2, 3, 4, 5].map(k => `<button class="chip" data-rn="${k}" aria-pressed="${k === rn}">${k}×${k}</button>`).join("");
+  $("randKind").innerHTML = [["whole", "Whole-number answer"], ["fractions", "Fractions"]].map(([k, l]) => `<button class="chip" data-rk="${k}" aria-pressed="${k === R.kind}">${l}</button>`).join("");
+
+  renderShare();
+  renderCheck();
+}
+
+function renderCheck() {
+  const p = $("checkPanel");
+  if (!S.check) { p.hidden = true; return; }
+  p.hidden = false;
+  const k = S.history.length, turns = `${k} turn${k === 1 ? "" : "s"}`, best = S.check.newBest ? " New personal best." : "";
+  if (S.check.claim) {
+    const body = {
+      proven: `<div class="verdict ok">Row R${S.check.row + 1} on the left is all zeros, so A has no inverse. You showed it in ${turns}.${best}</div>`,
+      hint: `<div class="verdict bad">Good instinct, but show it first. Keep reducing until a whole row on the left side is zeros, then claim again.</div>`,
+      wrong: `<div class="verdict bad">This matrix does have an inverse. The wrong claim counts as a turn.</div>`,
+    }[S.check.claim];
+    p.innerHTML = `<h2>No-inverse claim</h2>
+      <p class="small" style="margin:0 0 10px">A matrix has no inverse when row reduction leaves a row of zeros on the left side. That's the proof the game looks for.</p>${body}${postedHTML()}`;
+    return;
+  }
+  const { P, ok } = S.check;
+  p.innerHTML = `<h2>Inverse check</h2>
+    <p class="small" style="margin:0">The game multiplies the original matrix A by your candidate (the right side) and looks for the identity.</p>
+    <div class="scroll"><div class="product">
+      ${matHTML(S.A)}<span class="sym">×</span>${matHTML(rightHalf(S.M))}<span class="sym">=</span>
+      ${matHTML(P, { cellCls: (i, j, x) => (x.eq(i === j ? ONE : Z) ? "idc" : "badc") })}
+    </div></div>
+    ${ok
+      ? `<div class="verdict ok">A × candidate = I. You found A⁻¹ in ${turns}.${best}</div>`
+      : `<div class="verdict bad">Not the identity yet. ${isIdentity(S.M.map(r => r.slice(0, S.n))) ? "" : "Keep reducing until the left side is I; "}the red entries are off.</div>`}
+    ${ok ? postedHTML() : ""}`;
+}
+function postedHTML() {
+  const ps = S.posted;
+  if (!ps) return "";
+  if (ps.state === "sending") return `<p class="small" style="margin:10px 0 0">Posting your score…</p>`;
+  if (ps.state === "error") return `<p class="err" style="margin:10px 0 0">Your score wasn't posted: ${esc(ps.message)} <button id="btnRepost">Try again</button></p>`;
+  const you = ps.challenge.you;
+  return `<p class="small ok" style="margin:10px 0 0">Score posted. ${you ? `You're #${you.rank} of ${ps.challenge.players} on this matrix${ps.result.improved ? "" : ` (your best is still ${you.turns})`}.` : ""}</p>`;
+}
+
+// ---------- Leaderboard, sharing, history ----------
+function renderShare() {
+  const online = !!serverUrl() && S.chal?.id;
+  let link = S.chal?.code || "";
+  if (online) {
+    try {
+      const u = new URL(location.href); u.search = ""; u.hash = "";
+      u.searchParams.set("c", S.chal.id);
+      if (PAGE_PARAMS.get("server")) u.searchParams.set("server", PAGE_PARAMS.get("server"));
+      link = u.toString();
+    } catch {}
+  }
+  $("shareCode").value = link;
+  $("shareHint").textContent = online
+    ? "Send this link to a friend. They get the same matrix and land on the same leaderboard."
+    : "Send this code to a friend. They paste it below to race the same matrix.";
+}
+function setChallengeParam(id) {
+  if (!serverUrl()) return;
+  try { const u = new URL(location.href); u.searchParams.set("c", id); history.replaceState(null, "", u); } catch {}
+}
+
+async function fetchBoard() {
+  if (!serverUrl()) { BOARD = { state: "offline" }; return renderBoard(); }
+  const id = S.chal.id; BOARD = { state: "loading", id }; renderBoard();
+  try {
+    const r = await api("GET", `/challenges/${id}?playerId=${encodeURIComponent(me.playerId)}`);
+    if (S.chal.id === id) BOARD = { state: "ok", id, ch: r.challenge };
+  } catch (e) {
+    if (S.chal.id === id) BOARD = e.status === 404 ? { state: "empty", id } : { state: "error", id, message: e.message };
+  }
+  renderBoard();
+}
+function renderBoard() {
+  const el = $("board");
+  if (BOARD.state === "offline") { el.innerHTML = `<p class="small" style="margin:0">Leaderboards need the Matrix Race server. Deploy it with the README, then paste its URL into <code>SERVER_URL</code> in this page. Your best scores are kept on this device meanwhile.</p>`; return; }
+  if (BOARD.state === "loading" || BOARD.state === "idle") { el.innerHTML = `<p class="small" style="margin:0">Loading…</p>`; return; }
+  if (BOARD.state === "error") { el.innerHTML = `<p class="err" style="margin:0">${esc(BOARD.message)}</p>`; return; }
+  if (BOARD.state === "empty" || !BOARD.ch.leaderboard.length) { el.innerHTML = `<p class="small" style="margin:0">No one has finished this matrix yet. Finish it to take first place.</p>`; return; }
+  const ch = BOARD.ch;
+  el.innerHTML = `<ol>${ch.leaderboard.map((r, k) => `<li class="${r.you ? "me" : ""}"><span class="rk">${k + 1}</span><span class="nm">${esc(r.name)}${r.you ? " (you)" : ""}</span><span class="tn">${r.turns}</span></li>`).join("")}</ol>
+    <p class="small" style="margin:0">${ch.players} player${ch.players === 1 ? "" : "s"} · ${ch.plays} finished game${ch.plays === 1 ? "" : "s"}${ch.you && ch.you.rank > ch.leaderboard.length ? ` · you're #${ch.you.rank}` : ""}</p>`;
+}
+
+async function postScore(outcome) {
+  if (!serverUrl()) return;
+  const game = S;
+  S.posted = { state: "sending" }; renderCheck();
+  const turns = S.history.map(h => (h.claim ? WRONG_CLAIM : h.ops.map(opText)));
+  try {
+    await api("POST", "/challenges", { matrix: S.chal.code, name: S.chal.name, playerId: me.playerId });
+    const r = await api("POST", `/challenges/${game.chal.id}/results`, { playerId: me.playerId, name: me.name || "Player", turns, outcome });
+    game.posted = { state: "ok", ...r };
+    if (S === game) { BOARD = { state: "ok", id: game.chal.id, ch: r.challenge }; renderBoard(); }
+    fetchHistory();
+  } catch (e) { game.posted = { state: "error", message: e.message, outcome }; }
+  if (S === game) renderCheck();
+}
+
+async function fetchHistory() {
+  if (!serverUrl()) return;
+  try {
+    const { player } = await api("GET", `/players/${encodeURIComponent(me.playerId)}`);
+    $("historyPanel").hidden = !player.history.length;
+    const day = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    $("games").innerHTML = player.history.slice(0, 12).map(h =>
+      `<li><button data-code="${esc(h.code)}" data-title="${esc(h.title || "")}">${h.n}×${h.n}${h.title ? ` · ${esc(h.title)}` : ""}${h.outcome === "none" ? " · no inverse" : ""}</button><span class="small">${h.turns} turn${h.turns === 1 ? "" : "s"} · ${day(h.at)}</span></li>`).join("");
+  } catch { /* history is a nice-to-have */ }
+}
+
+// ---------- Actions ----------
+function finish(check, outcome) {
+  S.solved = true; S.check = check;
+  const prev = me.best[S.chal.code];
+  if (!prev || S.history.length < prev) { me.best[S.chal.code] = S.history.length; saveMe(); S.check.newBest = true; }
+  postScore(outcome);
+}
+function scrollToCheck() { $("checkPanel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "nearest" }); }
+
+function runCheck() {
+  const P = multiply(S.A, rightHalf(S.M)), ok = isIdentity(P);
+  if (ok && !S.solved) finish({ P, ok }, "inverse"); else S.check = { P, ok };
+  render(); scrollToCheck();
+}
+function claimNoInverse() {
+  const r = zeroRow(S.M);
+  S.pending = [];
+  if (r >= 0) finish({ claim: "proven", row: r }, "none");
+  else if (det(S.A).zero) S.check = { claim: "hint" };
+  else { S.history.push({ ops: [], before: S.M, claim: "Claimed no inverse (wrong)" }); S.check = { claim: "wrong" }; }
+  render(); scrollToCheck();
+}
+
+function addOp(op) {
+  const e = validate(op, S.pending, S.n);
+  if (e) return e;
+  S.pending.push(op);
+  // reset the builder onto a row that's still free this turn
+  const changed = new Set(S.pending.flatMap(touched)), busy = changed;
+  const free = [...Array(S.n).keys()].find(r => !busy.has(r));
+  B.mode = "combo";
+  {
+    B.a = "1";
+    if (free !== undefined) B.t = free;
+    const src = [...Array(S.n).keys()].find(r => r !== B.t);
+    B.terms = src === undefined ? [] : [{ s: src, b: "" }];
+  }
+  renderBuilder(); render();
+  return null;
+}
+function playTurn() {
+  if (!S.pending.length) return;
+  S.history.push({ ops: S.pending, before: S.M });
+  S.flash = S.pending.flatMap(touched);
+  S.M = apply(S.M, S.pending);
+  S.pending = []; S.check = null;
+  // clear the multipliers so nothing is drafted until you start the next operation
+  const s0 = B.terms[0]?.s;
+  B.mode = "combo"; B.a = "1"; B.terms = [{ s: s0 !== undefined && s0 !== B.t ? s0 : (B.t === 0 ? 1 : 0), b: "" }];
+  renderBuilder(); render();
+  if (isIdentity(S.M.map(r => r.slice(0, S.n)))) runCheck();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t || t.disabled) return;
+  const ds = t.dataset;
+  if (ds.mode) { B.mode = ds.mode; renderBuilder(); render(); }
+  else if (ds.t !== undefined) { B.t = +ds.t; renderBuilder(); render(); }
+  else if (ds.s !== undefined) { B.terms[+ds.k].s = +ds.s; renderBuilder(); render(); $(`coefB${ds.k}`)?.focus(); }
+  else if (ds.rmterm !== undefined) { B.terms.splice(+ds.rmterm, 1); renderBuilder(); render(); }
+  else if (t.id === "btnAddTerm") {
+    const used = new Set([B.t, ...B.terms.map(x => x.s)]), s = [...Array(S.n).keys()].find(r => !used.has(r));
+    if (s !== undefined) { B.terms.push({ s, b: "" }); renderBuilder(); render(); $(`coefB${B.terms.length - 1}`)?.focus(); }
+  }
+  else if (ds.i !== undefined) { B.i = +ds.i; renderBuilder(); render(); }
+  else if (ds.j !== undefined) { B.j = +ds.j; renderBuilder(); render(); }
+  else if (ds.rm !== undefined) { S.pending.splice(+ds.rm, 1); render(); }
+  else if (ds.rn) { R.n = +ds.rn; render(); }
+  else if (ds.rk) { R.kind = ds.rk; render(); }
+  else if (ds.chal) { const c = CHALLENGES.find(x => x.id === ds.chal); if (c) loadChallenge(c); }
+  else if (ds.code) { const r = readMatrix(ds.code); if (r.A) loadChallenge({ id: "history", name: ds.title || "From your games", rows: r.A }); }
+  else if (t.id === "btnRandom") {
+    const rn = R.n ?? S.n, trap = R.traps && Math.random() < 1 / 3;
+    const A = (trap && randomSingular(rn)) || randomMatrix(rn, R.kind);
+    if (A) loadChallenge({ id: "random", name: R.kind === "fractions" ? "Random, fractions" : "Random, whole numbers", rows: A });
+  }
+  else if (t.id === "btnAdd") { const d = draftOp(); if (d.op) { const err = addOp(d.op); if (err) $("err").textContent = err; } }
+  else if (t.id === "btnPlay") playTurn();
+  else if (t.id === "btnUndo") { const h = S.history.pop(); if (h) { S.M = h.before; S.pending = []; S.check = null; render(); } }
+  else if (t.id === "btnRestart") loadChallenge(S.chal);
+  else if (t.id === "btnCheck") runCheck();
+  else if (t.id === "btnClaim") claimNoInverse();
+  else if (t.id === "btnRepost") postScore(S.posted.outcome);
+  else if (t.id === "btnCopy") {
+    const v = $("shareCode").value;
+    const done = () => { t.textContent = "Copied"; setTimeout(() => (t.textContent = "Copy"), 1400); };
+    try { navigator.clipboard.writeText(v).then(done, () => $("shareCode").select()); } catch { $("shareCode").select(); }
+  }
+  else if (t.id === "btnLoad") loadCustom();
+});
+document.addEventListener("change", e => { if (e.target.id === "trapToggle") R.traps = e.target.checked; });
+document.addEventListener("input", e => {
+  if (e.target.id === "coefA") { B.a = e.target.value; render(); }
+  else if (e.target.dataset.term !== undefined) { B.terms[+e.target.dataset.term].b = e.target.value; render(); }
+  else if (e.target.id === "playerName") { me.name = e.target.value.trim().slice(0, 20); saveMe(); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  if (e.target.id === "coefA" || e.target.dataset?.term !== undefined) { e.preventDefault(); $("btnAdd").click(); }
+  if (e.target.id === "typed") {
+    e.preventDefault();
+    const r = parseOp(e.target.value, S.n);
+    const err = r.err || addOp(r.op);
+    $("err").textContent = err || "";
+    if (!err) e.target.value = "";
+  }
+});
+
+function loadCustom() {
+  const raw = $("customIn").value.trim(), out = $("customErr");
+  out.textContent = "";
+  if (!raw) { out.textContent = "Type a matrix or paste a code first."; return; }
+  const m = raw.match(/[?&]c=([a-z0-9]+)/);
+  if (m) return openShared(m[1], out);
+  const r = readMatrix(raw);
+  if (r.err) { out.textContent = r.err; return; }
+  const known = CHALLENGES.find(c => c.code === codeOf(r.A));
+  loadChallenge(known || { id: "custom", name: "Custom challenge", rows: r.A });
+}
+
+async function openShared(id, errEl) {
+  try {
+    const { challenge } = await api("GET", `/challenges/${id}?playerId=${encodeURIComponent(me.playerId)}`);
+    const known = CHALLENGES.find(c => c.code === challenge.code);
+    loadChallenge(known || { id: "shared", name: challenge.name || "Shared challenge", rows: readMatrix(challenge.code).A });
+    return true;
+  } catch (e) { if (errEl) errEl.textContent = e.message; return false; }
+}
+
+async function start() {
+  $("playerName").value = me.name || "";
+  $("serverNote").textContent = serverUrl() ? "Your name shows on leaderboards." : "Playing offline. Scores stay on this device.";
+  try {
+    const list = await (await fetch("challenges.json")).json();
+    CHALLENGES = list.map(c => ({ ...c, code: codeOf(toF(c.rows)) }));
+  } catch {
+    CHALLENGES = [{ id: "classic3", name: "Classic 3×3", rows: [[1, 2, 3], [0, 1, 4], [5, 6, 0]] }].map(c => ({ ...c, code: codeOf(toF(c.rows)) }));
+  }
+  const shared = PAGE_PARAMS.get("c");
+  if (!(shared && serverUrl() && await openShared(shared, null))) {
+    loadChallenge(CHALLENGES.find(c => c.id === "classic3") || CHALLENGES[0]);
+    // open in a working state: a first elimination move drafted for R3
+    if (S.chal.id !== undefined && S.n === 3 && S.chal.code === "3:1,2,3;0,1,4;5,6,0") { B.t = 2; B.terms = [{ s: 0, b: "-5" }]; renderBuilder(); render(); }
+  }
+  fetchHistory();
+}
+start();
+</script>
+</body>
+</html>
